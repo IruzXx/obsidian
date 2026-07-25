@@ -509,10 +509,14 @@ function TranslatorManager:BuildLanguageSection(Tab, GroupboxName)
     })
 
     -- Current language display
-    Box:AddLabel(function()
+    local currentLangLabel = Box:AddLabel("Current: English (en)", false)
+
+    local function RefreshLangLabel()
         local lang = TranslatorManager.Languages[TranslatorManager.CurrentLanguage]
-        return string.format("Current: %s (%s)", lang.nativeName, lang.code)
-    end, false)
+        if lang and currentLangLabel then
+            currentLangLabel:SetText(string.format("Current: %s (%s)", lang.nativeName, TranslatorManager.CurrentLanguage))
+        end
+    end
 
     Box:AddDivider()
 
@@ -554,6 +558,7 @@ function TranslatorManager:BuildLanguageSection(Tab, GroupboxName)
 
         if selected then
             TranslatorManager:SetLanguage(selected.code)
+            RefreshLangLabel()
 
             if TranslatorManager.Library then
                 TranslatorManager.Library:Notify({

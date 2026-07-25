@@ -469,12 +469,14 @@ function SchedulerManager:BuildSchedulerSection(Tab, GroupboxName)
     end
 
     -- Stats
-    local stats = SchedulerManager:GetStats()
-    Box:AddLabel(function()
+    local statsLabel = Box:AddLabel("Tasks: 0 | Active: 0 | Executions: 0", false)
+
+    local function RefreshStats()
+        if not statsLabel then return end
         local s = SchedulerManager:GetStats()
-        return string.format("Tasks: %d | Active: %d | Executions: %d",
-            s.totalTasks, s.enabledTasks, s.totalExecutions)
-    end, false)
+        statsLabel:SetText(string.format("Tasks: %d | Active: %d | Executions: %d",
+            s.totalTasks, s.enabledTasks, s.totalExecutions))
+    end
 
     Box:AddDivider()
 
@@ -509,6 +511,7 @@ function SchedulerManager:BuildSchedulerSection(Tab, GroupboxName)
     SchedulerManager._taskListRefreshLoop = RunService.Heartbeat:Connect(function()
         task.wait(2)
         RefreshTaskList()
+        RefreshStats()
     end)
 
     return Box
