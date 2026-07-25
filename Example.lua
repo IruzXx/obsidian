@@ -2,6 +2,9 @@
     Obsidian UI Library - Full Feature Demo
     Showcases all addons in a comprehensive example
     Author: IruzXx
+
+    IMPORTANT: For production, deploy files to your repo and update LOAD_MODE.
+    For local testing, set LOAD_MODE = "local"
 --]]
 
 -- =========================================================
@@ -13,27 +16,97 @@ local CONFIG = {
     ScriptVersion = "1.0.0",
     WebhookURL = "", -- Set your webhook URL for crash reports
     TelemetryEndpoint = "", -- Set your telemetry endpoint
+
+    -- LOAD_MODE: "remote" (from repo) or "local" (from same directory)
+    -- For testing: use "local"
+    -- For production: use "remote" after deploying
+    LOAD_MODE = "remote",
+
+    -- Your repo URL (update this after pushing to GitHub)
+    REPO_OWNER = "IruzXx",
+    REPO_NAME = "obsidian",
+    REPO_BRANCH = "main",
 }
+
+-- Get repo base URL
+local function getRepoUrl()
+    return string.format(
+        "https://raw.githubusercontent.com/%s/%s/%s/",
+        CONFIG.REPO_OWNER,
+        CONFIG.REPO_NAME,
+        CONFIG.REPO_BRANCH
+    )
+end
+
+-- =========================================================
+--                    LIBRARY LOADER
+-- =========================================================
+
+local function loadScript(path)
+    local mode = CONFIG.LOAD_MODE
+
+    if mode == "local" then
+        -- Load from local files
+        local success, result = pcall(loadfile, path)
+        if success and result then
+            return result()
+        else
+            return nil, "Failed to load local: " .. path .. " - " .. tostring(result)
+        end
+    else
+        -- Load from remote repo
+        local repoUrl = getRepoUrl()
+        local url = repoUrl .. path
+        local success, result = pcall(loadstring, game:HttpGet(url))
+        if success and result then
+            return result()
+        else
+            return nil, "Failed to load remote: " .. url
+        end
+    end
+end
 
 -- =========================================================
 --                    LIBRARY SETUP
 -- =========================================================
 
--- Get the repo URL (change for your deployment)
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-
 -- Load core library
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local Library = loadScript("Library.lua")
+
+-- Fallback to remote if local fails
+if not Library then
+    warn("Local Library.lua not found, trying remote...")
+    local repoUrl = getRepoUrl()
+    Library = loadstring(game:HttpGet(repoUrl .. "Library.lua"))()
+end
+
+if not Library then
+    error("Failed to load Library! Please check your deployment.")
+end
+
+-- =========================================================
+--                    LOAD ADDONS
+-- =========================================================
+
+local function loadAddon(name, path)
+    local addon = loadScript(path)
+    if not addon then
+        warn(string.format("[%s] Not available (using fallback)", name))
+        return nil
+    end
+    print(string.format("[%s] Loaded successfully", name))
+    return addon
+end
 
 -- Load all official addons
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
-local CrashHandler = loadstring(game:HttpGet(repo .. "addons/CrashHandler.lua"))()
-local AnalyticsManager = loadstring(game:HttpGet(repo .. "addons/AnalyticsManager.lua"))()
-local TelemetryManager = loadstring(game:HttpGet(repo .. "addons/TelemetryManager.lua"))()
-local TranslatorManager = loadstring(game:HttpGet(repo .. "addons/TranslatorManager.lua"))()
-local SchedulerManager = loadstring(game:HttpGet(repo .. "addons/SchedulerManager.lua"))()
-local ShortcutManager = loadstring(game:HttpGet(repo .. "addons/ShortcutManager.lua"))()
+local ThemeManager = loadAddon("ThemeManager", "addons/ThemeManager.lua")
+local SaveManager = loadAddon("SaveManager", "addons/SaveManager.lua")
+local CrashHandler = loadAddon("CrashHandler", "addons/CrashHandler.lua")
+local AnalyticsManager = loadAddon("AnalyticsManager", "addons/AnalyticsManager.lua")
+local TelemetryManager = loadAddon("TelemetryManager", "addons/TelemetryManager.lua")
+local TranslatorManager = loadAddon("TranslatorManager", "addons/TranslatorManager.lua")
+local SchedulerManager = loadAddon("SchedulerManager", "addons/SchedulerManager.lua")
+local ShortcutManager = loadAddon("ShortcutManager", "addons/ShortcutManager.lua")
 
 local Options = Library.Options
 local Toggles = Library.Toggles
@@ -43,51 +116,55 @@ local Toggles = Library.Toggles
 -- =========================================================
 
 -- Configure Analytics
-AnalyticsManager:Configure({
-    scriptName = CONFIG.ScriptName,
-    scriptVersion = CONFIG.ScriptVersion,
-    enableTracking = true,
-    batchInterval = 30,
-    webhookURL = CONFIG.WebhookURL,
-})
+if AnalyticsManager then
+    AnalyticsManager:Configure({
+        scriptName = CONFIG.ScriptName,
+        scriptVersion = CONFIG.ScriptVersion,
+        enableTracking = true,
+        batchInterval = 30,
+        webhookURL = CONFIG.WebhookURL,
+    })
+end
 
 -- Configure Telemetry (disabled by default - opt-in)
-TelemetryManager:Configure({
-    enabled = false, -- User must opt-in
-    endpoint = CONFIG.TelemetryEndpoint,
-    privacyMode = true,
-})
-
--- Configure Crash Handler
-CrashHandler:Configure({
-    EnableAutoRestart = true,
-    MaxRetries = 3,
-    RetryDelay = 2,
-    CooldownTime = 60,
-})
-
--- Set callbacks for CrashHandler
-CrashHandler.OnCrash = function(errorMsg, stack)
-    print("[CrashHandler] Application crashed:", errorMsg)
-    AnalyticsManager:TrackError(errorMsg, { stack = stack })
-end
-
-CrashHandler.OnRestart = function(attempt)
-    print("[CrashHandler] Restarting... Attempt", attempt)
-    Library:Notify({
-        Title = "CrashHandler",
-        Description = string.format("Restarting... Attempt %d", attempt),
-        Time = 3,
+if TelemetryManager then
+    TelemetryManager:Configure({
+        enabled = false, -- User must opt-in
+        endpoint = CONFIG.TelemetryEndpoint,
+        privacyMode = true,
     })
 end
 
-CrashHandler.OnMaxRetriesExceeded = function()
-    print("[CrashHandler] Max retries exceeded!")
-    Library:Notify({
-        Title = "CrashHandler",
-        Description = "Max retries exceeded. Please restart manually.",
-        Time = 5,
-    })
+-- Configure Crash Handler (set properties directly)
+if CrashHandler then
+    CrashHandler.EnableAutoRestart = true
+    CrashHandler.MaxRetries = 3
+    CrashHandler.RetryDelay = 2
+    CrashHandler.CooldownTime = 60
+
+    -- Set callbacks for CrashHandler
+    CrashHandler.OnCrash = function(errorMsg, stack)
+        print("[CrashHandler] Application crashed:", errorMsg)
+        if AnalyticsManager then AnalyticsManager:TrackError(errorMsg, { stack = stack }) end
+    end
+
+    CrashHandler.OnRestart = function(attempt)
+        print("[CrashHandler] Restarting... Attempt", attempt)
+        Library:Notify({
+            Title = "CrashHandler",
+            Description = string.format("Restarting... Attempt %d", attempt),
+            Time = 3,
+        })
+    end
+
+    CrashHandler.OnMaxRetriesExceeded = function()
+        print("[CrashHandler] Max retries exceeded!")
+        Library:Notify({
+            Title = "CrashHandler",
+            Description = "Max retries exceeded. Please restart manually.",
+            Time = 5,
+        })
+    end
 end
 
 -- =========================================================
@@ -115,29 +192,31 @@ local Tabs = {
 --                    REGISTER SHORTCUTS
 -- =========================================================
 
-ShortcutManager:Register("Toggle UI", "Toggle menu visibility", "general", {
-    keybind = Enum.KeyCode.RightShift,
-    action = function()
-        Window:Toggle()
-    end,
-})
+if ShortcutManager then
+    ShortcutManager:Register("Toggle UI", "Toggle menu visibility", "general", {
+        keybind = Enum.KeyCode.RightShift,
+        action = function()
+            Window:Toggle()
+        end,
+    })
 
-ShortcutManager:Register("Show Analytics", "Open analytics tab", "navigation", {
-    action = function()
-        Window:SelectTab(Tabs.Analytics)
-    end,
-})
+    ShortcutManager:Register("Show Analytics", "Open analytics tab", "navigation", {
+        action = function()
+            Window:SelectTab(Tabs.Analytics)
+        end,
+    })
 
-ShortcutManager:Register("Emergency Stop", "Stop all scheduled tasks", "general", {
-    action = function()
-        SchedulerManager:Stop()
-        Library:Notify({
-            Title = "Scheduler",
-            Description = "All tasks stopped",
-            Time = 2,
-        })
-    end,
-})
+    ShortcutManager:Register("Emergency Stop", "Stop all scheduled tasks", "general", {
+        action = function()
+            if SchedulerManager then SchedulerManager:Stop() end
+            Library:Notify({
+                Title = "Scheduler",
+                Description = "All tasks stopped",
+                Time = 2,
+            })
+        end,
+    })
+end
 
 -- =========================================================
 --                    MAIN TAB - TOGGLES
@@ -180,31 +259,31 @@ MainGroupbox:AddToggle("Aimbot", {
 Toggles.GodMode:OnChanged(function()
     local enabled = Toggles.GodMode.Value
     print("[GodMode]", enabled and "Enabled" or "Disabled")
-    AnalyticsManager:TrackToggle("GodMode", enabled)
+    if AnalyticsManager then AnalyticsManager:TrackToggle("GodMode", enabled) end
 end)
 
 Toggles.SpeedHack:OnChanged(function()
     local enabled = Toggles.SpeedHack.Value
     print("[SpeedHack]", enabled and "Enabled" or "Disabled")
-    AnalyticsManager:TrackToggle("SpeedHack", enabled)
+    if AnalyticsManager then AnalyticsManager:TrackToggle("SpeedHack", enabled) end
 end)
 
 Toggles.InfiniteJump:OnChanged(function()
     local enabled = Toggles.InfiniteJump.Value
     print("[InfiniteJump]", enabled and "Enabled" or "Disabled")
-    AnalyticsManager:TrackToggle("InfiniteJump", enabled)
+    if AnalyticsManager then AnalyticsManager:TrackToggle("InfiniteJump", enabled) end
 end)
 
 Toggles.ESP:OnChanged(function()
     local enabled = Toggles.ESP.Value
     print("[ESP]", enabled and "Enabled" or "Disabled")
-    AnalyticsManager:TrackToggle("ESP", enabled)
+    if AnalyticsManager then AnalyticsManager:TrackToggle("ESP", enabled) end
 end)
 
 Toggles.Aimbot:OnChanged(function()
     local enabled = Toggles.Aimbot.Value
     print("[Aimbot]", enabled and "Enabled" or "Disabled")
-    AnalyticsManager:TrackToggle("Aimbot", enabled)
+    if AnalyticsManager then AnalyticsManager:TrackToggle("Aimbot", enabled) end
 end)
 
 -- =========================================================
@@ -256,25 +335,25 @@ SlidersGroupbox:AddSlider("ESPAlpha", {
 Options.WalkSpeed:OnChanged(function()
     local value = Options.WalkSpeed.Value
     print("[WalkSpeed]", value)
-    AnalyticsManager:TrackSliderChange("WalkSpeed", value)
+    if AnalyticsManager then AnalyticsManager:TrackSliderChange("WalkSpeed", value) end
 end)
 
 Options.JumpPower:OnChanged(function()
     local value = Options.JumpPower.Value
     print("[JumpPower]", value)
-    AnalyticsManager:TrackSliderChange("JumpPower", value)
+    if AnalyticsManager then AnalyticsManager:TrackSliderChange("JumpPower", value) end
 end)
 
 Options.FlySpeed:OnChanged(function()
     local value = Options.FlySpeed.Value
     print("[FlySpeed]", value)
-    AnalyticsManager:TrackSliderChange("FlySpeed", value)
+    if AnalyticsManager then AnalyticsManager:TrackSliderChange("FlySpeed", value) end
 end)
 
 Options.ESPAlpha:OnChanged(function()
     local value = Options.ESPAlpha.Value
     print("[ESPAlpha]", value)
-    AnalyticsManager:TrackSliderChange("ESPAlpha", value)
+    if AnalyticsManager then AnalyticsManager:TrackSliderChange("ESPAlpha", value) end
 end)
 
 -- =========================================================
@@ -288,20 +367,22 @@ SchedulerGroupbox:AddButton({
     Text = "Schedule Reminder (30s)",
     Tooltip = "Schedule a reminder in 30 seconds",
     Func = function()
-        SchedulerManager:ScheduleOnce("Reminder", 30, function()
-            Library:Notify({
-                Title = "Scheduler",
-                Description = "30 seconds have passed!",
-                Time = 5,
-            })
-            AnalyticsManager:TrackEvent("scheduler", "reminder_triggered", 1, {})
-        end)
+        if SchedulerManager then
+            SchedulerManager:ScheduleOnce("Reminder", 30, function()
+                Library:Notify({
+                    Title = "Scheduler",
+                    Description = "30 seconds have passed!",
+                    Time = 5,
+                })
+                if AnalyticsManager then AnalyticsManager:TrackEvent("scheduler", "reminder_triggered", 1, {}) end
+            end)
+        end
         Library:Notify({
             Title = "Scheduler",
             Description = "Reminder scheduled for 30 seconds",
             Time = 2,
         })
-        AnalyticsManager:TrackButtonClick("ScheduleReminder")
+        if AnalyticsManager then AnalyticsManager:TrackButtonClick("ScheduleReminder") end
     end,
 })
 
@@ -309,26 +390,29 @@ SchedulerGroupbox:AddButton({
     Text = "Schedule Auto-Save (1min)",
     Tooltip = "Schedule auto-save every minute",
     Func = function()
-        local taskId = SchedulerManager:ScheduleInterval("AutoSave", 60, function()
-            print("[AutoSave] Saving configuration...")
-            -- Your save logic here
-            AnalyticsManager:TrackEvent("scheduler", "autosave", 1, {})
-        end)
-        Library:Notify({
-            Title = "Scheduler",
-            Description = string.format("Auto-save scheduled (Task #%d)", taskId),
-            Time = 2,
-        })
-        AnalyticsManager:TrackButtonClick("ScheduleAutoSave")
+        if SchedulerManager then
+            local taskId = SchedulerManager:ScheduleInterval("AutoSave", 60, function()
+                print("[AutoSave] Saving configuration...")
+                if AnalyticsManager then AnalyticsManager:TrackEvent("scheduler", "autosave", 1, {}) end
+            end)
+            Library:Notify({
+                Title = "Scheduler",
+                Description = string.format("Auto-save scheduled (Task #%d)", taskId),
+                Time = 2,
+            })
+        end
+        if AnalyticsManager then AnalyticsManager:TrackButtonClick("ScheduleAutoSave") end
     end,
 })
 
 SchedulerGroupbox:AddButton({
     Text = "List Active Tasks",
     Func = function()
-        local tasks = SchedulerManager:GetAllTasks()
         local count = 0
-        for _ in pairs(tasks) do count = count + 1 end
+        if SchedulerManager then
+            local tasks = SchedulerManager:GetAllTasks()
+            for _ in pairs(tasks) do count = count + 1 end
+        end
         Library:Notify({
             Title = "Scheduler",
             Description = string.format("Active tasks: %d", count),
@@ -338,199 +422,212 @@ SchedulerGroupbox:AddButton({
 })
 
 -- Build scheduler UI section
-SchedulerManager:BuildSchedulerSection(Tabs.Scheduler)
+if SchedulerManager then
+    SchedulerManager:BuildSchedulerSection(Tabs.Scheduler)
+end
 
 -- --- Translator Demo ---
-local TranslatorGroupbox = Tabs.Features:AddRightGroupbox("Language", "globe")
+if TranslatorManager then
+    local TranslatorGroupbox = Tabs.Features:AddRightGroupbox("Language", "globe")
 
--- Add custom translations
-TranslatorManager:AddTranslations("en", {
-    ["feature.godmode"] = "God Mode",
-    ["feature.speedhack"] = "Speed Hack",
-    ["feature.esp"] = "ESP Players",
-    ["notification.saved"] = "Configuration saved!",
-    ["notification.loaded"] = "Configuration loaded!",
-})
+    -- Add custom translations
+    TranslatorManager:AddTranslations("en", {
+        ["feature.godmode"] = "God Mode",
+        ["feature.speedhack"] = "Speed Hack",
+        ["feature.esp"] = "ESP Players",
+        ["notification.saved"] = "Configuration saved!",
+        ["notification.loaded"] = "Configuration loaded!",
+    })
 
-TranslatorManager:AddTranslations("id", {
-    ["feature.godmode"] = "Mode Dewa",
-    ["feature.speedhack"] = "Hack Kecepatan",
-    ["feature.esp"] = "ESP Pemain",
-    ["notification.saved"] = "Konfigurasi disimpan!",
-    ["notification.loaded"] = "Konfigurasi dimuat!",
-})
+    TranslatorManager:AddTranslations("id", {
+        ["feature.godmode"] = "Mode Dewa",
+        ["feature.speedhack"] = "Hack Kecepatan",
+        ["feature.esp"] = "ESP Pemain",
+        ["notification.saved"] = "Konfigurasi disimpan!",
+        ["notification.loaded"] = "Konfigurasi dimuat!",
+    })
 
-TranslatorManager:AddTranslations("jp", {
-    ["feature.godmode"] = "ゴッドモード",
-    ["feature.speedhack"] = "スピードハック",
-    ["feature.esp"] = "ESPプレイヤー",
-    ["notification.saved"] = "設定が保存されました！",
-    ["notification.loaded"] = "設定が読み込まれました！",
-})
+    TranslatorManager:AddTranslations("jp", {
+        ["feature.godmode"] = "ゴッドモード",
+        ["feature.speedhack"] = "スピードハック",
+        ["feature.esp"] = "ESPプレイヤー",
+        ["notification.saved"] = "設定が保存されました！",
+        ["notification.loaded"] = "設定が読み込まれました！",
+    })
 
-TranslatorGroupbox:AddLabel("Current Language:")
-TranslatorGroupbox:AddLabel(function()
-    return TranslatorManager:GetLanguage():upper() .. " - " .. (TranslatorManager.Languages[TranslatorManager.CurrentLanguage] or {}).nativeName or ""
-end, false)
+    TranslatorGroupbox:AddLabel("Current Language:")
+    TranslatorGroupbox:AddLabel(function()
+        return TranslatorManager:GetLanguage():upper() .. " - " .. (TranslatorManager.Languages[TranslatorManager.CurrentLanguage] or {}).nativeName or ""
+    end, false)
 
-TranslatorGroupbox:AddButton({
-    Text = "Test Translation Key",
-    Func = function()
-        local key = Options.TranslatorTestKey and Options.TranslatorTestKey.Value or "feature.godmode"
-        local translated = TranslatorManager:Get(key)
-        Library:Notify({
-            Title = "Translation",
-            Description = string.format("%s = %s", key, translated),
-            Time = 3,
-        })
-    end,
-})
+    TranslatorGroupbox:AddButton({
+        Text = "Test Translation Key",
+        Func = function()
+            local key = Options.TranslatorTestKey and Options.TranslatorTestKey.Value or "feature.godmode"
+            local translated = TranslatorManager:Get(key)
+            Library:Notify({
+                Title = "Translation",
+                Description = string.format("%s = %s", key, translated),
+                Time = 3,
+            })
+        end,
+    })
 
-TranslatorGroupbox:AddInput("TranslatorTestKey", {
-    Text = "Translation Key",
-    Placeholder = "e.g., feature.godmode",
-    Default = "feature.godmode",
-})
+    TranslatorGroupbox:AddInput("TranslatorTestKey", {
+        Text = "Translation Key",
+        Placeholder = "e.g., feature.godmode",
+        Default = "feature.godmode",
+    })
 
--- Build translator UI section
-TranslatorManager:BuildLanguageSection(Tabs.Features)
+    -- Build translator UI section
+    TranslatorManager:BuildLanguageSection(Tabs.Features)
+end
 
 -- --- Shortcuts Demo ---
-local ShortcutsGroupbox = Tabs.Settings:AddLeftGroupbox("Shortcuts", "command")
+if ShortcutManager then
+    local ShortcutsGroupbox = Tabs.Settings:AddLeftGroupbox("Shortcuts", "command")
 
-ShortcutsGroupbox:AddLabel("Press F1 to open Command Palette", false)
+    ShortcutsGroupbox:AddLabel("Press F1 to open Command Palette", false)
 
-ShortcutsGroupbox:AddButton({
-    Text = "Open Command Palette",
-    Func = function()
-        ShortcutManager:ShowPalette()
-        AnalyticsManager:TrackButtonClick("OpenPalette")
-    end,
-})
+    ShortcutsGroupbox:AddButton({
+        Text = "Open Command Palette",
+        Func = function()
+            ShortcutManager:ShowPalette()
+            if AnalyticsManager then AnalyticsManager:TrackButtonClick("OpenPalette") end
+        end,
+    })
 
--- Build shortcuts UI section
-ShortcutManager:BuildShortcutSection(Tabs.Settings)
+    -- Build shortcuts UI section
+    ShortcutManager:BuildShortcutSection(Tabs.Settings)
+end
 
 -- --- Analytics Demo ---
-local AnalyticsGroupbox = Tabs.Analytics:AddLeftGroupbox("Usage Tracking", "bar-chart-2")
+if AnalyticsManager then
+    local AnalyticsGroupbox = Tabs.Analytics:AddLeftGroupbox("Usage Tracking", "bar-chart-2")
 
-AnalyticsGroupbox:AddToggle("EnableAnalytics", {
-    Text = "Enable Analytics",
-    Default = true,
-    Tooltip = "Track feature usage",
-    Callback = function(Value)
-        AnalyticsManager.EnableTracking = Value
-        if Value then
-            AnalyticsManager:StartSession()
-        else
-            AnalyticsManager:EndSession()
-        end
-    end,
-})
+    AnalyticsGroupbox:AddToggle("EnableAnalytics", {
+        Text = "Enable Analytics",
+        Default = true,
+        Tooltip = "Track feature usage",
+        Callback = function(Value)
+            AnalyticsManager.EnableTracking = Value
+            if Value then
+                AnalyticsManager:StartSession()
+            else
+                AnalyticsManager:EndSession()
+            end
+        end,
+    })
 
-AnalyticsGroupbox:AddButton({
-    Text = "Track Custom Event",
-    Func = function()
-        AnalyticsManager:TrackEvent("custom", "button_click", 1, {
-            source = "demo_button",
-            timestamp = os.time(),
-        })
-        Library:Notify({
-            Title = "Analytics",
-            Description = "Custom event tracked!",
-            Time = 2,
-        })
-    end,
-})
+    AnalyticsGroupbox:AddButton({
+        Text = "Track Custom Event",
+        Func = function()
+            AnalyticsManager:TrackEvent("custom", "button_click", 1, {
+                source = "demo_button",
+                timestamp = os.time(),
+            })
+            Library:Notify({
+                Title = "Analytics",
+                Description = "Custom event tracked!",
+                Time = 2,
+            })
+        end,
+    })
 
-AnalyticsGroupbox:AddButton({
-    Text = "Track Feature Usage",
-    Func = function()
-        AnalyticsManager:TrackFeatureUsed("demo_feature", {
-            source = "demo_tab",
-        })
-        Library:Notify({
-            Title = "Analytics",
-            Description = "Feature usage tracked!",
-            Time = 2,
-        })
-    end,
-})
+    AnalyticsGroupbox:AddButton({
+        Text = "Track Feature Usage",
+        Func = function()
+            AnalyticsManager:TrackFeatureUsed("demo_feature", {
+                source = "demo_tab",
+            })
+            Library:Notify({
+                Title = "Analytics",
+                Description = "Feature usage tracked!",
+                Time = 2,
+            })
+        end,
+    })
 
-AnalyticsGroupbox:AddButton({
-    Text = "Get Summary",
-    Func = function()
-        local summary = AnalyticsManager:GetSummary()
-        Library:Notify({
-            Title = "Analytics Summary",
-            Description = string.format(
-                "Events: %d\nErrors: %d\nSession: %ds",
-                summary.totalEvents,
-                summary.errorCount,
-                summary.sessionDuration
-            ),
-            Time = 4,
-        })
-    end,
-})
+    AnalyticsGroupbox:AddButton({
+        Text = "Get Summary",
+        Func = function()
+            local summary = AnalyticsManager:GetSummary()
+            Library:Notify({
+                Title = "Analytics Summary",
+                Description = string.format(
+                    "Events: %d\nErrors: %d\nSession: %ds",
+                    summary.totalEvents,
+                    summary.errorCount,
+                    summary.sessionDuration
+                ),
+                Time = 4,
+            })
+        end,
+    })
 
--- Build analytics UI section
-AnalyticsManager:BuildAnalyticsSection(Tabs.Analytics)
+    -- Build analytics UI section
+    AnalyticsManager:BuildAnalyticsSection(Tabs.Analytics)
+end
 
 -- --- Telemetry Demo ---
-local TelemetryGroupbox = Tabs.Analytics:AddRightGroupbox("Anonymous Telemetry", "activity")
+if TelemetryManager then
+    local TelemetryGroupbox = Tabs.Analytics:AddRightGroupbox("Anonymous Telemetry", "activity")
 
-TelemetryGroupbox:AddLabel("Privacy-First Analytics", false)
-TelemetryGroupbox:AddLabel("- No personal data collected", true)
-TelemetryGroupbox:AddLabel("- Anonymous ID only", true)
-TelemetryGroupbox:AddLabel("- Opt-in only", true)
+    TelemetryGroupbox:AddLabel("Privacy-First Analytics", false)
+    TelemetryGroupbox:AddLabel("- No personal data collected", true)
+    TelemetryGroupbox:AddLabel("- Anonymous ID only", true)
+    TelemetryGroupbox:AddLabel("- Opt-in only", true)
 
--- Build telemetry UI section
-TelemetryManager:BuildTelemetrySection(Tabs.Analytics)
+    -- Build telemetry UI section
+    TelemetryManager:BuildTelemetrySection(Tabs.Analytics)
+end
 
 -- --- Crash Handler Demo ---
-local CrashGroupbox = Tabs.Analytics:AddRightGroupbox("Crash Handler", "shield-alert")
+if CrashHandler then
+    local CrashGroupbox = Tabs.Analytics:AddRightGroupbox("Crash Handler", "shield-alert")
 
-CrashGroupbox:AddButton({
-    Text = "Simulate Error",
-    Tooltip = "Test crash handler (safe)",
-    Risky = true,
-    Func = function()
-        CrashHandler:LogError("Demo Error", "This is a simulated error for testing", debug.traceback())
-        Library:Notify({
-            Title = "CrashHandler",
-            Description = "Error logged successfully!",
-            Time = 2,
-        })
-    end,
-})
+    CrashGroupbox:AddButton({
+        Text = "Simulate Error",
+        Tooltip = "Test crash handler (safe)",
+        Risky = true,
+        Func = function()
+            CrashHandler:LogError("Demo Error", "This is a simulated error for testing", debug.traceback())
+            Library:Notify({
+                Title = "CrashHandler",
+                Description = "Error logged successfully!",
+                Time = 2,
+            })
+        end,
+    })
 
-CrashGroupbox:AddButton({
-    Text = "Test SafeCall",
-    Func = function()
-        local success, err = CrashHandler:SafeCall("TestFunction", function()
-            return "Success!"
-        end)
-        print("[SafeCall] Success:", success, "Result:", err)
-    end,
-})
+    CrashGroupbox:AddButton({
+        Text = "Test SafeCall",
+        Func = function()
+            local success, err = CrashHandler:SafeCall("TestFunction", function()
+                return "Success!"
+            end)
+            print("[SafeCall] Success:", success, "Result:", err)
+        end,
+    })
 
-CrashGroupbox:AddButton({
-    Text = "View Crash Logs",
-    Func = function()
-        local logs = CrashHandler:GetLogs(5)
-        local content = HttpService:JSONEncode(logs)
-        setclipboard(content)
-        Library:Notify({
-            Title = "CrashHandler",
-            Description = "Logs copied to clipboard!",
-            Time = 2,
-        })
-    end,
-})
+    CrashGroupbox:AddButton({
+        Text = "View Crash Logs",
+        Func = function()
+            local logs = CrashHandler:GetLogs(5)
+            local Http = game:GetService("HttpService")
+            local content = Http:JSONEncode(logs)
+            setclipboard(content)
+            Library:Notify({
+                Title = "CrashHandler",
+                Description = "Logs copied to clipboard!",
+                Time = 2,
+            })
+        end,
+    })
 
--- Build crash handler UI section
-CrashHandler:BuildCrashSection(Tabs.Analytics)
+    -- Build crash handler UI section
+    CrashHandler:BuildCrashSection(Tabs.Analytics)
+end
 
 -- =========================================================
 --                    SETTINGS TAB
@@ -588,66 +685,72 @@ Library.ToggleKeybind = Options.MenuKeybind
 -- =========================================================
 
 -- Initialize addons with library
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-CrashHandler:SetLibrary(Library)
-AnalyticsManager:SetLibrary(Library)
-TelemetryManager:SetLibrary(Library)
-TranslatorManager:SetLibrary(Library)
-SchedulerManager:SetLibrary(Library)
-ShortcutManager:SetLibrary(Library)
+if ThemeManager then ThemeManager:SetLibrary(Library) end
+if SaveManager then SaveManager:SetLibrary(Library) end
+if CrashHandler then CrashHandler:SetLibrary(Library) end
+if AnalyticsManager then AnalyticsManager:SetLibrary(Library) end
+if TelemetryManager then TelemetryManager:SetLibrary(Library) end
+if TranslatorManager then TranslatorManager:SetLibrary(Library) end
+if SchedulerManager then SchedulerManager:SetLibrary(Library) end
+if ShortcutManager then ShortcutManager:SetLibrary(Library) end
 
 -- Ignore theme settings in save
-SaveManager:IgnoreThemeSettings()
-
--- Ignore menu keybind in save
-SaveManager:SetIgnoreIndexes({ "MenuKeybind", "TranslatorTestKey" })
+if SaveManager then
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({ "MenuKeybind", "TranslatorTestKey" })
+    SaveManager:SetFolder("ObsidianDemo")
+end
 
 -- Set folders for save/theme
-ThemeManager:SetFolder("ObsidianDemo")
-SaveManager:SetFolder("ObsidianDemo")
+if ThemeManager then ThemeManager:SetFolder("ObsidianDemo") end
 
 -- Build config sections
-SaveManager:BuildConfigSection(Tabs.Settings)
-ThemeManager:ApplyToTab(Tabs.Settings)
+if SaveManager then SaveManager:BuildConfigSection(Tabs.Settings) end
+if ThemeManager then ThemeManager:ApplyToTab(Tabs.Settings) end
 
 -- Load auto-save config
-SaveManager:LoadAutoloadConfig()
+if SaveManager then SaveManager:LoadAutoloadConfig() end
 
 -- =========================================================
 --                    INITIALIZATION COMPLETE
 -- =========================================================
 
+-- Count loaded addons
+local loadedCount = 0
+if ThemeManager then loadedCount = loadedCount + 1 end
+if SaveManager then loadedCount = loadedCount + 1 end
+if CrashHandler then loadedCount = loadedCount + 1 end
+if AnalyticsManager then loadedCount = loadedCount + 1 end
+if TelemetryManager then loadedCount = loadedCount + 1 end
+if TranslatorManager then loadedCount = loadedCount + 1 end
+if SchedulerManager then loadedCount = loadedCount + 1 end
+if ShortcutManager then loadedCount = loadedCount + 1 end
+
 print("=================================")
 print(string.format("%s v%s initialized!", CONFIG.ScriptName, CONFIG.ScriptVersion))
-print("=================================")
-print("Addons loaded:")
-print("  - ThemeManager: OK")
-print("  - SaveManager: OK")
-print("  - CrashHandler: OK")
-print("  - AnalyticsManager: OK")
-print("  - TelemetryManager: OK")
-print("  - TranslatorManager: OK")
-print("  - SchedulerManager: OK")
-print("  - ShortcutManager: OK")
+print(string.format("Addons loaded: %d/8", loadedCount))
 print("=================================")
 
 Library:Notify({
     Title = CONFIG.ScriptName,
-    Description = string.format("v%s loaded successfully!", CONFIG.ScriptVersion),
+    Description = string.format("v%s loaded! (%d addons)", CONFIG.ScriptVersion, loadedCount),
     Time = 3,
 })
 
 -- Track script start
-AnalyticsManager:TrackEvent("script", "started", 1, {
-    version = CONFIG.ScriptVersion,
-    game = game.GameId,
-})
+if AnalyticsManager then
+    AnalyticsManager:TrackEvent("script", "started", 1, {
+        version = CONFIG.ScriptVersion,
+        game = game.GameId,
+    })
+end
 
 -- Cleanup on unload
 Library:OnUnload(function()
-    AnalyticsManager:TrackEvent("script", "unloaded", 1, {})
-    AnalyticsManager:EndSession()
-    TelemetryManager:EndSession()
-    SchedulerManager:Stop()
+    if AnalyticsManager then
+        AnalyticsManager:TrackEvent("script", "unloaded", 1, {})
+        AnalyticsManager:EndSession()
+    end
+    if TelemetryManager then TelemetryManager:EndSession() end
+    if SchedulerManager then SchedulerManager:Stop() end
 end)
