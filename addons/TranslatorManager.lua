@@ -56,7 +56,7 @@ local TranslatorManager = {
 --                    TYPE DEFINITIONS
 -- =========================================================
 
-export type LanguageCode = keyof typeof TranslatorManager.Languages
+export type LanguageCode = string
 
 export type TranslationTable = { [string]: string }
 

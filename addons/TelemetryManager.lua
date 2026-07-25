@@ -279,9 +279,7 @@ function TelemetryManager:BuildTelemetrySection(Tab, GroupboxName)
 
     -- Privacy info
     Box:AddLabel("Privacy Information:", false)
-    Box:AddLabel(function()
-        return "Anonymous ID: " .. TelemetryManager:_GetOrCreateAnonymousId():sub(1, 8) .. "..."
-    end, true)
+    Box:AddLabel("Anonymous ID: " .. TelemetryManager:_GetOrCreateAnonymousId():sub(1, 8) .. "...", true)
     Box:AddLabel("- No personal data collected", true)
     Box:AddLabel("- No Roblox username/ID", true)
     Box:AddLabel("- Cannot be used to identify you", true)
