@@ -12,6 +12,8 @@ local Players = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
 local isfolder, isfile, listfiles = isfolder, isfile, listfiles
 
+-- Utils (HttpService already loaded above, no external require needed)
+
 -- =========================================================
 --                    MODULE TABLE
 -- =========================================================
@@ -106,7 +108,7 @@ function AnalyticsManager:StartSession()
         return AnalyticsManager._sessionId
     end
 
-    AnalyticsManager._sessionId = Utils.HttpService:GenerateGUID(false)
+    AnalyticsManager._sessionId = HttpService:GenerateGUID(false)
     AnalyticsManager._sessionStart = os.time()
     AnalyticsManager._startTime = tick()
     AnalyticsManager._lastBatchTime = tick()
