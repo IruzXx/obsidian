@@ -9,9 +9,8 @@ end)
 
 local HttpService = cloneref(game:GetService("HttpService"))
 local Players = cloneref(game:GetService("Players"))
+local RunService = cloneref(game:GetService("RunService"))
 local isfolder = isfolder
-
-local Players = cloneref(game:GetService("Players"))
 
 -- =========================================================
 --                    MODULE TABLE
@@ -39,6 +38,9 @@ local TelemetryManager = {
 
     -- Storage
     Folder = "ObsidianTelemetry",
+
+    -- Internal connections (for cleanup)
+    _statusRefreshLoop = nil,
 }
 
 -- =========================================================
@@ -78,7 +80,10 @@ end
 -- =========================================================
 
 function TelemetryManager:_GenerateAnonymousId()
-    -- Generate random ID yang tidak bisa di-trace ke player
+    -- Seed math.random for better entropy
+    math.randomseed(os.time() + (math.random(1, 10000)))
+
+    -- Generate random ID that cannot be traced to player
     local chars = "abcdefghijklmnopqrstuvwxyz0123456789"
     local id = {}
 
@@ -320,19 +325,17 @@ function TelemetryManager:BuildTelemetrySection(Tab, GroupboxName)
         end,
     })
 
-    -- Auto update status
-    task.spawn(function()
-        while true do
-            task.wait(3)
+    -- Auto update status using heartbeat (properly cleaned up)
+    TelemetryManager._statusRefreshLoop = RunService.Heartbeat:Connect(function()
+        task.wait(3)
 
-            local summary = TelemetryManager:GetSummary()
-            StatusLabel:SetText(string.format(
-                "Status: %s | Events: %d | Duration: %ds",
-                TelemetryManager.Enabled and "Tracking" or "Off",
-                summary.totalEvents,
-                summary.sessionDuration
-            ))
-        end
+        local summary = TelemetryManager:GetSummary()
+        StatusLabel:SetText(string.format(
+            "Status: %s | Events: %d | Duration: %ds",
+            TelemetryManager.Enabled and "Tracking" or "Off",
+            summary.totalEvents,
+            summary.sessionDuration
+        ))
     end)
 
     return Box
@@ -352,6 +355,12 @@ task.defer(function()
     if TelemetryManager.Library then
         TelemetryManager.Library:OnUnload(function()
             TelemetryManager:EndSession()
+
+            -- Disconnect UI refresh loop
+            if TelemetryManager._statusRefreshLoop then
+                TelemetryManager._statusRefreshLoop:Disconnect()
+                TelemetryManager._statusRefreshLoop = nil
+            end
         end)
     end
 end)

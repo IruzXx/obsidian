@@ -43,6 +43,7 @@ local AnalyticsManager = {
     _eventsQueue = {},
     _startTime = 0,
     _lastBatchTime = 0,
+    _summaryRefreshLoop = nil,
 }
 
 -- =========================================================
@@ -392,9 +393,9 @@ function AnalyticsManager:GetLocalEvents(count: number?)
         return events
     end
 
-    -- Sort by date
+    -- Sort by date (descending - newest first, longest strings first)
     table.sort(files, function(a, b)
-        return a > b
+        return #a > #b or (#a == #b and a < b)
     end)
 
     local collected = 0
@@ -574,19 +575,25 @@ function AnalyticsManager:BuildAnalyticsSection(Tab, GroupboxName)
         end,
     })
 
-    -- Auto refresh
-    task.spawn(function()
-        while true do
-            task.wait(10)
-            local summary = AnalyticsManager:GetSummary()
-            SummaryLabel:SetText(string.format(
-                "Events: %d | Errors: %d | Session: %ds",
-                summary.totalEvents, summary.errorCount, summary.sessionDuration
-            ))
-        end
+    -- Auto refresh using heartbeat (properly cleanup)
+    AnalyticsManager._summaryRefreshLoop = RunService.Heartbeat:Connect(function()
+        task.wait(10)
+        local summary = AnalyticsManager:GetSummary()
+        SummaryLabel:SetText(string.format(
+            "Events: %d | Errors: %d | Session: %ds",
+            summary.totalEvents, summary.errorCount, summary.sessionDuration
+        ))
     end)
 
     return Box
+end
+
+function AnalyticsManager:Cleanup()
+    -- Disconnect summary refresh loop
+    if AnalyticsManager._summaryRefreshLoop then
+        AnalyticsManager._summaryRefreshLoop:Disconnect()
+        AnalyticsManager._summaryRefreshLoop = nil
+    end
 end
 
 -- =========================================================
@@ -601,6 +608,7 @@ task.defer(function()
     if AnalyticsManager.Library then
         AnalyticsManager.Library:OnUnload(function()
             AnalyticsManager:EndSession()
+            AnalyticsManager:Cleanup()
         end)
     end
 end)

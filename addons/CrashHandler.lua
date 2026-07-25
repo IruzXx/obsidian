@@ -11,9 +11,6 @@ local HttpService = cloneref(game:GetService("HttpService"))
 local RunService = cloneref(game:GetService("RunService"))
 local Players = cloneref(game:GetService("Players"))
 
-local RunService = cloneref(game:GetService("RunService"))
-local Players = cloneref(game:GetService("Players"))
-
 -- =========================================================
 --                    MODULE TABLE
 -- =========================================================
@@ -34,6 +31,9 @@ local CrashHandler = {
     _crashLogs = {},
     _maxLogs = 50,
     _originalFunctions = {},
+    _heartbeatConnection = nil,
+    _statsRefreshLoop = nil,
+    _logsRefreshLoop = nil,
 
     -- Callbacks
     OnCrash = nil,           -- function(error, stack) called saat crash
@@ -107,7 +107,7 @@ function CrashHandler:SafeCall(name, func, ...)
     local args = {...}
 
     local success, result = pcall(function()
-        return func(table.unpack(args, 1, args.n or #args))
+        return func(table.unpack(args, 1, #args))
     end)
 
     if not success then
@@ -261,43 +261,27 @@ local originalSettings = {
 }
 
 function CrashHandler:EnableGlobalHandler()
-    -- Simpan identity
-    originalSettings.identity = settings().Security.PlayersGetChat
-    -- Matikan identity verification untuk allow error capture
-    -- settings().Security.PlayersGetChat = false  -- Uncomment jika perlu
-
-    -- Hook ke RunService heartbeat untuk detect crashes
+    -- Hook to RunService heartbeat for detect crashes
     CrashHandler._heartbeatConnection = RunService.Heartbeat:Connect(function()
-        -- Periodic health check bisa ditambahkan di sini
+        -- Periodic health check can be added here
     end)
-
-    -- Set metatable untuk hook errors di environment
-    local env = getgenv()
-
-    -- Hook print untuk detect issues
-    local originalPrint = print
-    getgenv().print = function(...)
-        local args = {...}
-        local success, err = pcall(function()
-            return originalPrint(table.unpack(args))
-        end)
-        if not success then
-            CrashHandler:LogError("print", err)
-        end
-        return originalPrint(table.unpack(args))
-    end
 end
 
 function CrashHandler:DisableGlobalHandler()
-    -- Restore settings
-    if originalSettings.identity then
-        -- settings().Security.PlayersGetChat = originalSettings.identity
-    end
-
     -- Disconnect heartbeat
     if CrashHandler._heartbeatConnection then
         CrashHandler._heartbeatConnection:Disconnect()
         CrashHandler._heartbeatConnection = nil
+    end
+
+    -- Disconnect UI refresh loops
+    if CrashHandler._statsRefreshLoop then
+        CrashHandler._statsRefreshLoop:Disconnect()
+        CrashHandler._statsRefreshLoop = nil
+    end
+    if CrashHandler._logsRefreshLoop then
+        CrashHandler._logsRefreshLoop:Disconnect()
+        CrashHandler._logsRefreshLoop = nil
     end
 end
 
@@ -506,19 +490,15 @@ function CrashHandler:BuildCrashSection(Tab, GroupboxName)
         end,
     })
 
-    -- Auto refresh
-    task.spawn(function()
-        while true do
-            task.wait(5)
-            RefreshStats()
-        end
+    -- Auto refresh using heartbeat connections (cleaned up properly)
+    CrashHandler._statsRefreshLoop = RunService.Heartbeat:Connect(function()
+        task.wait(5)
+        RefreshStats()
     end)
 
-    task.spawn(function()
-        while true do
-            task.wait(2)
-            RefreshLogs()
-        end
+    CrashHandler._logsRefreshLoop = RunService.Heartbeat:Connect(function()
+        task.wait(2)
+        RefreshLogs()
     end)
 
     return Box

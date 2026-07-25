@@ -9,8 +9,6 @@ end)
 
 local RunService = cloneref(game:GetService("RunService"))
 
-local RunService = cloneref(game:GetService("RunService"))
-
 -- =========================================================
 --                    MODULE TABLE
 -- =========================================================
@@ -29,6 +27,9 @@ local SchedulerManager = {
     -- Callbacks
     OnTaskExecute = nil,
     OnTaskSkip = nil,
+
+    -- Internal connections (for cleanup)
+    _taskListRefreshLoop = nil,
 }
 
 -- =========================================================
@@ -274,11 +275,22 @@ end
 -- =========================================================
 
 function SchedulerManager:_GetNextDailyTime(timeStr: string): number
-    local hour, min = timeStr:match("(%d+):(%d+)")
-    hour = tonumber(hour) or 0
-    min = tonumber(min) or 0
+    -- Validate time string format (HH:MM)
+    local hour, min = timeStr:match("^(%d+):(%d+)$")
 
-    local now = os.date("*t")
+    -- If pattern doesn't match, default to midnight
+    if not hour or not min then
+        warn(string.format("[SchedulerManager] Invalid time format '%s', defaulting to 00:00", tostring(timeStr)))
+        hour, min = 0, 0
+    else
+        hour = tonumber(hour) or 0
+        min = tonumber(min) or 0
+        -- Validate hour and minute ranges
+        hour = math.max(0, math.min(23, hour))
+        min = math.max(0, math.min(59, min))
+    end
+
+    local now = os.time()
     local target = {
         year = now.year,
         month = now.month,
@@ -288,10 +300,10 @@ function SchedulerManager:_GetNextDailyTime(timeStr: string): number
         sec = 0,
     }
 
-    -- Jika waktu sudah lewat hari ini, pakai besok
+    -- If time has passed today, use tomorrow
     local targetTime = os.time(target)
     if targetTime <= now then
-        targetTime = targetTime + 86400  -- Tambah 1 hari
+        targetTime = targetTime + 86400  -- Add 1 day
     end
 
     return targetTime
@@ -433,7 +445,12 @@ function SchedulerManager:BuildSchedulerSection(Tab, GroupboxName)
             if task.type == "once" then
                 nextTime = formatTime(task.executeAt)
             elseif task.type == "interval" then
-                nextTime = formatInterval(task.nextExecute - os.time()) .. " remaining"
+                local remaining = task.nextExecute - os.time()
+                if remaining > 0 then
+                    nextTime = formatInterval(remaining) .. " remaining"
+                else
+                    nextTime = "overdue"
+                end
             elseif task.type == "daily" then
                 nextTime = "Daily at " .. task.timeOfDay
             end
@@ -488,12 +505,10 @@ function SchedulerManager:BuildSchedulerSection(Tab, GroupboxName)
         Func = RefreshTaskList,
     })
 
-    -- Auto refresh
-    task.spawn(function()
-        while true do
-            task.wait(2)
-            RefreshTaskList()
-        end
+    -- Auto refresh using heartbeat (properly cleaned up)
+    SchedulerManager._taskListRefreshLoop = RunService.Heartbeat:Connect(function()
+        task.wait(2)
+        RefreshTaskList()
     end)
 
     return Box
@@ -511,6 +526,12 @@ task.defer(function()
     if SchedulerManager.Library then
         SchedulerManager.Library:OnUnload(function()
             SchedulerManager:Stop()
+
+            -- Disconnect UI refresh loop
+            if SchedulerManager._taskListRefreshLoop then
+                SchedulerManager._taskListRefreshLoop:Disconnect()
+                SchedulerManager._taskListRefreshLoop = nil
+            end
         end)
     end
 end)

@@ -8,12 +8,6 @@ local cloneref = (cloneref or clonereference or function(instance: any)
 end)
 
 local HttpService = cloneref(game:GetService("HttpService"))
-
-local UserInputService = cloneref(game:GetService("UserInputService"))
-local TweenService = cloneref(game:GetService("TweenService"))
-local RunService = cloneref(game:GetService("RunService"))
-local Players = cloneref(game:GetService("Players"))
-
 local UserInputService = cloneref(game:GetService("UserInputService"))
 local TweenService = cloneref(game:GetService("TweenService"))
 local RunService = cloneref(game:GetService("RunService"))
@@ -41,6 +35,11 @@ local ShortcutManager = {
 
     -- History
     RecentCommands = {},
+
+    -- Internal connections (for cleanup)
+    _statsRefreshLoop = nil,
+    _inputConnection = nil,
+    _searchConnection = nil,
 }
 
 -- =========================================================
@@ -78,8 +77,55 @@ function ShortcutManager:SetLibrary(Library)
     assert(Library, "[ShortcutManager] Library tidak boleh nil")
     ShortcutManager.Library = Library
 
-    -- Setup command palette
-    ShortcutManager:_CreatePaletteGui()
+    -- Setup command palette (deferred to allow GUI creation)
+    task.defer(function()
+        ShortcutManager:_CreatePaletteGui()
+    end)
+
+    -- Hook toggle key
+    ShortcutManager:_HookInput()
+end
+
+function ShortcutManager:_HookInput()
+    if ShortcutManager._inputConnection then return end
+
+    ShortcutManager._inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+
+        if input.KeyCode == ShortcutManager.ToggleKey then
+            ShortcutManager:TogglePalette()
+        end
+
+        if input.KeyCode == Enum.KeyCode.Escape and ShortcutManager.PaletteOpen then
+            ShortcutManager:HidePalette()
+        end
+    end)
+end
+
+function ShortcutManager:_Cleanup()
+    -- Disconnect stats refresh loop
+    if ShortcutManager._statsRefreshLoop then
+        ShortcutManager._statsRefreshLoop:Disconnect()
+        ShortcutManager._statsRefreshLoop = nil
+    end
+
+    -- Disconnect input connection
+    if ShortcutManager._inputConnection then
+        ShortcutManager._inputConnection:Disconnect()
+        ShortcutManager._inputConnection = nil
+    end
+
+    -- Disconnect search connection
+    if ShortcutManager._searchConnection then
+        ShortcutManager._searchConnection:Disconnect()
+        ShortcutManager._searchConnection = nil
+    end
+
+    -- Destroy palette GUI
+    if ShortcutManager.PaletteGui and ShortcutManager.PaletteGui.ScreenGui then
+        ShortcutManager.PaletteGui.ScreenGui:Destroy()
+        ShortcutManager.PaletteGui = nil
+    end
 end
 
 -- =========================================================
@@ -224,7 +270,20 @@ end
 function ShortcutManager:_CreatePaletteGui()
     if ShortcutManager.PaletteGui then return end
 
-    local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+    -- Check for LocalPlayer (required for PlayerGui)
+    if not Players.LocalPlayer then
+        warn("[ShortcutManager] LocalPlayer not available, deferring GUI creation")
+        return false
+    end
+
+    local success, playerGui = pcall(function()
+        return Players.LocalPlayer:WaitForChild("PlayerGui", 5)
+    end)
+
+    if not success or not playerGui then
+        warn("[ShortcutManager] Could not access PlayerGui")
+        return false
+    end
 
     -- Create ScreenGui
     local screenGui = Instance.new("ScreenGui")
@@ -351,8 +410,8 @@ function ShortcutManager:_CreatePaletteGui()
         Results = resultsContainer,
     }
 
-    -- Search handler
-    searchBar:GetPropertyChangedSignal("Text"):Connect(function()
+    -- Search handler (store connection for cleanup)
+    ShortcutManager._searchConnection = searchBar:GetPropertyChangedSignal("Text"):Connect(function()
         ShortcutManager:_UpdateResults(searchBar.Text)
     end)
 
@@ -366,6 +425,8 @@ function ShortcutManager:_CreatePaletteGui()
     -- Initial hide
     screenGui.Enabled = false
     screenGui.Parent = playerGui
+
+    return true
 end
 
 function ShortcutManager:_UpdateResults(searchText: string)
@@ -637,17 +698,15 @@ function ShortcutManager:BuildShortcutSection(Tab, GroupboxName)
         end,
     })
 
-    -- Auto refresh
-    task.spawn(function()
-        while true do
-            task.wait(5)
-            local stats = ShortcutManager:GetStats()
-            StatsLabel:SetText(string.format(
-                "Shortcuts: %d | Categories: %d",
-                stats.totalShortcuts,
-                #stats.topUsed
-            ))
-        end
+    -- Auto refresh using heartbeat (properly cleaned up)
+    ShortcutManager._statsRefreshLoop = RunService.Heartbeat:Connect(function()
+        task.wait(5)
+        local stats = ShortcutManager:GetStats()
+        StatsLabel:SetText(string.format(
+            "Shortcuts: %d | Categories: %d",
+            stats.totalShortcuts,
+            #stats.topUsed
+        ))
     end)
 
     return Box
@@ -657,22 +716,13 @@ end
 --                    INIT
 -- =========================================================
 
--- Create palette GUI
-ShortcutManager:_CreatePaletteGui()
-
--- Hook toggle key
-task.spawn(function()
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-
-        if input.KeyCode == ShortcutManager.ToggleKey then
-            ShortcutManager:TogglePalette()
-        end
-
-        if input.KeyCode == Enum.KeyCode.Escape and ShortcutManager.PaletteOpen then
-            ShortcutManager:HidePalette()
-        end
-    end)
+-- Cleanup on unload
+task.defer(function()
+    if ShortcutManager.Library then
+        ShortcutManager.Library:OnUnload(function()
+            ShortcutManager:_Cleanup()
+        end)
+    end
 end)
 
 return ShortcutManager
