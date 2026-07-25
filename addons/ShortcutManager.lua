@@ -77,13 +77,10 @@ function ShortcutManager:SetLibrary(Library)
     assert(Library, "[ShortcutManager] Library tidak boleh nil")
     ShortcutManager.Library = Library
 
-    -- Setup command palette (deferred to allow GUI creation)
-    task.defer(function()
-        ShortcutManager:_CreatePaletteGui()
-    end)
-
-    -- Hook toggle key
+    -- Hook toggle key immediately
     ShortcutManager:_HookInput()
+
+    -- Palette GUI created lazily on first ShowPalette call
 end
 
 function ShortcutManager:_HookInput()

@@ -20,7 +20,7 @@ local CONFIG = {
     -- LOAD_MODE: "remote" (from repo) or "local" (from same directory)
     -- For testing: use "local"
     -- For production: use "remote" after deploying
-    LOAD_MODE = "remote",
+    LOAD_MODE = "local",
 
     -- Your repo URL (update this after pushing to GitHub)
     REPO_OWNER = "IruzXx",

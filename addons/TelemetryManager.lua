@@ -10,7 +10,7 @@ end)
 local HttpService = cloneref(game:GetService("HttpService"))
 local Players = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
-local isfolder = isfolder
+local isfolder = (isfolder or function() return false end)
 
 -- =========================================================
 --                    MODULE TABLE

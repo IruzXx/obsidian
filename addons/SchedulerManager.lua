@@ -235,24 +235,24 @@ function SchedulerManager:_StartSchedulerLoop()
 
             local now = os.time()
 
-            for _, task in pairs(SchedulerManager.Tasks) do
-                if not task.enabled then continue end
+            for _, scheduledTask in pairs(SchedulerManager.Tasks) do
+                if not scheduledTask.enabled then continue end
 
                 -- Check if should execute
                 local shouldExecute = false
 
-                if task.type == "once" then
-                    shouldExecute = now >= (task.executeAt or 0)
+                if scheduledTask.type == "once" then
+                    shouldExecute = now >= (scheduledTask.executeAt or 0)
 
-                elseif task.type == "interval" then
-                    shouldExecute = now >= (task.nextExecute or 0)
+                elseif scheduledTask.type == "interval" then
+                    shouldExecute = now >= (scheduledTask.nextExecute or 0)
 
-                elseif task.type == "daily" then
-                    shouldExecute = now >= (task.nextExecute or 0)
+                elseif scheduledTask.type == "daily" then
+                    shouldExecute = now >= (scheduledTask.nextExecute or 0)
                 end
 
                 if shouldExecute then
-                    SchedulerManager:_ExecuteTask(task)
+                    SchedulerManager:_ExecuteTask(scheduledTask)
                 end
             end
         end

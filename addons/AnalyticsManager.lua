@@ -131,7 +131,7 @@ function AnalyticsManager:StartSession()
     AnalyticsManager._lastBatchTime = tick()
 
     -- Track session start
-    AnalyticsManager:TrackEvent("script_started", "session_start", {
+    AnalyticsManager:TrackEvent("script_started", "session_start", 1, {
         scriptName = AnalyticsManager.ScriptName,
         version = AnalyticsManager.ScriptVersion,
     })
@@ -148,7 +148,7 @@ function AnalyticsManager:EndSession()
     local sessionDuration = tick() - AnalyticsManager._startTime
 
     -- Track session end
-    AnalyticsManager:TrackEvent("script_unloaded", "session_end", {
+    AnalyticsManager:TrackEvent("script_unloaded", "session_end", 1, {
         duration = sessionDuration,
     })
 
