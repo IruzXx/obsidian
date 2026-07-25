@@ -10,9 +10,26 @@ end)
 local HttpService = cloneref(game:GetService("HttpService"))
 local Players = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
-local isfolder, isfile, listfiles = isfolder, isfile, listfiles
+local isfolder = (isfolder or function() return false end)
+local isfile = (isfile or function() return false end)
+local listfiles = (listfiles or function() return {} end)
+local makefolder = (makefolder or function() end)
+local readfile = (readfile or function() return nil end)
+local writefile = (writefile or function() end)
+local delfile = (delfile or function() end)
 
--- Utils (HttpService already loaded above, no external require needed)
+-- Inline ensureFolders (replaces Utils dependency)
+local function ensureFolders(path: string): boolean
+    local current = ""
+    for part in string.gmatch(path, "[^/]+") do
+        current = current == "" and part or (current .. "/" .. part)
+        if not isfolder(current) then
+            local ok = pcall(makefolder, current)
+            if not ok then return false end
+        end
+    end
+    return true
+end
 
 -- =========================================================
 --                    MODULE TABLE
@@ -344,7 +361,7 @@ end
 
 function AnalyticsManager:_EnsureFolders()
     local path = AnalyticsManager:_GetAnalyticsPath()
-    Utils.ensureFolders(path)
+    ensureFolders(path)
 end
 
 function AnalyticsManager:_PersistEvent(event)
